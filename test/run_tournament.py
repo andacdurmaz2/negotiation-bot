@@ -10,7 +10,7 @@ if str(root_dir) not in sys.path:
 from negmas.sao import SAOMechanism
 from negmas.outcomes import make_issue
 from negmas.preferences import LinearAdditiveUtilityFunction
-from src.negotiation_bot import Group35_Negotiator
+from src.negotiation_agent import Group35_Negotiator
 
 
 def run_self_test():
