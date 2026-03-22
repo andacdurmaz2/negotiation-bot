@@ -1,4 +1,5 @@
 import random
+from collections import defaultdict
 from negmas.sao import SAONegotiator, SAOState
 from negmas import Outcome, ResponseType
 
@@ -14,6 +15,9 @@ class Group35_Negotiator(SAONegotiator):
         self._sorted_outcomes: list[tuple[float, Outcome]] = []
         self._proposed: set = set()
 
+        self._opponent_counts: list[dict] = []
+        self._opponent_total: int = 0
+
     def on_preferences_changed(self, changes):
         if self.ufun and self.ufun.reserved_value is not None:
             reserved = float(self.ufun.reserved_value)
@@ -28,6 +32,9 @@ class Group35_Negotiator(SAONegotiator):
             key=lambda x: x[0],
             reverse=True,  # best outcomes first
         )
+
+        # Opponent modeling setup
+        self._opponent_counts = [defaultdict(int) for _ in self.nmi.issues]
 
     def get_aspiration_level(self, relative_time: float) -> float:
         """Calculates target utility using a Boulware curve (Time-based)."""
@@ -48,6 +55,8 @@ class Group35_Negotiator(SAONegotiator):
         if offer is None:
             return ResponseType.REJECT_OFFER
 
+        self._update_opponent_model(offer)
+
         offer_utility = float(self.ufun(offer))
         aspiration_level = self.get_aspiration_level(state.relative_time)
 
@@ -66,10 +75,17 @@ class Group35_Negotiator(SAONegotiator):
 
         aspiration_level = self.get_aspiration_level(state.relative_time)
 
-        for util, outcome in self._sorted_outcomes:
-            if util >= aspiration_level and outcome not in self._proposed:
-                self._proposed.add(outcome)
-                return outcome
+        candidates = [
+            (util, outcome)
+            for util, outcome in self._sorted_outcomes
+            if util >= aspiration_level and outcome not in self._proposed
+        ]
+
+        if candidates:
+            # Pick the candidate with highest estimated opponent utility
+            best = max(candidates, key=lambda x: self._estimate_opponent_utility(x[1]))
+            self._proposed.add(best[1])
+            return best[1]
 
         for util, outcome in self._sorted_outcomes:
             if outcome not in self._proposed:
@@ -77,3 +93,29 @@ class Group35_Negotiator(SAONegotiator):
                 return outcome
 
         return self._sorted_outcomes[0][1]
+
+    def _update_opponent_model(self, offer: Outcome) -> None:
+        """Called every time we see an opponent offer. Updates frequency counts."""
+        for i, value in enumerate(offer):
+            self._opponent_counts[i][value] += 1
+        self._opponent_total += 1
+
+    def _estimate_opponent_utility(self, outcome: Outcome) -> float:
+        """
+        Estimates how much the opponent values this outcome based on
+        how often they proposed each value in each issue.
+
+        Issues where the opponent always proposes the same value get
+        higher weight — those are the issues that matter to them.
+        """
+        if self._opponent_total == 0:
+            return 0.0
+
+        score = 0.0
+        for i, value in enumerate(outcome):
+            # Frequency of this value in issue i across all opponent offers
+            freq = self._opponent_counts[i][value] / self._opponent_total
+            score += freq
+
+        # Normalise by number of issues so result stays in [0, 1]
+        return score / len(self.nmi.issues)
