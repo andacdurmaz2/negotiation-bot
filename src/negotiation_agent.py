@@ -11,12 +11,23 @@ class Group35_Negotiator(SAONegotiator):
         self.min_utility = 0.6
         self.max_utility = 1.0
 
+        self._sorted_outcomes: list[tuple[float, Outcome]] = []
+        self._proposed: set = set()
+
     def on_preferences_changed(self, changes):
         if self.ufun and self.ufun.reserved_value is not None:
             reserved = float(self.ufun.reserved_value)
         # Only use it if it's a sensible value
         if reserved != float("-inf") and reserved != float("inf"):
             self.min_utility = reserved
+
+        # Sort the outcomes by utility for efficient proposal generation
+        outcomes = list(self.nmi.discrete_outcomes())
+        self._sorted_outcomes = sorted(
+            ((float(self.ufun(o)), o) for o in outcomes),
+            key=lambda x: x[0],
+            reverse=True,  # best outcomes first
+        )
 
     def get_aspiration_level(self, relative_time: float) -> float:
         """Calculates target utility using a Boulware curve (Time-based)."""
@@ -49,23 +60,20 @@ class Group35_Negotiator(SAONegotiator):
         self, state: SAOState, dest: str | None = None, **kwargs
     ) -> Outcome | None:
         """Bidding Strategy: Propose an outcome that meets our target utility."""
+
+        if not self._sorted_outcomes:
+            return None
+
         aspiration_level = self.get_aspiration_level(state.relative_time)
 
-        acceptable_outcomes = []
-        best_outcome = None
-        best_util = -1.0
+        for util, outcome in self._sorted_outcomes:
+            if util >= aspiration_level and outcome not in self._proposed:
+                self._proposed.add(outcome)
+                return outcome
 
-        for outcome in self.nmi.discrete_outcomes():
-            util = float(self.ufun(outcome))
+        for util, outcome in self._sorted_outcomes:
+            if outcome not in self._proposed:
+                self._proposed.add(outcome)
+                return outcome
 
-            if util >= aspiration_level:
-                acceptable_outcomes.append(outcome)
-
-            if util > best_util:
-                best_util = util
-                best_outcome = outcome
-
-        if acceptable_outcomes:
-            return random.choice(acceptable_outcomes)
-
-        return best_outcome
+        return self._sorted_outcomes[0][1]

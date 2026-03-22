@@ -15,23 +15,30 @@ from src.negotiation_agent import Group35_Negotiator
 
 def run_self_test():
     # 1. Define Issues (10 distinct options per issue, represented as integers 0-9)
-    issues = [make_issue(10, name="Apples"), make_issue(10, name="Bananas")]
+    issues = [
+        make_issue(["Volvo", "Ford", "Ferrari"], name="Brand"),
+        make_issue(["red", "yellow", "green"], name="Color"),
+    ]
 
     # 2. # Define Value Functions for both agents
-    ##Agent A wants HIGH apples, LOW bananas
-    apple_values_a = {i: i / 9.0 for i in range(10)}
-    banana_values_a = {i: (9 - i) / 9.0 for i in range(10)}
-
-    ## Agent B wants LOW apples, HIGH bananas
-    apple_values_b = {i: (9 - i) / 9.0 for i in range(10)}
-    banana_values_b = {i: i / 9.0 for i in range(10)}
-
+    values_a = [
+        {"Volvo": 1.0, "Ford": 0.6, "Ferrari": 0.2},
+        {"red": 0.4, "yellow": 0.6, "green": 1.0},
+    ]
+    values_b = [
+        {"Volvo": 0.2, "Ford": 0.6, "Ferrari": 1.0},
+        {"red": 1.0, "yellow": 0.5, "green": 0.3},
+    ]
     # 3. Define Linear Additive Preferences for both agents
     pref_a = LinearAdditiveUtilityFunction(
-        values=[apple_values_a, banana_values_a], weights=[0.7, 0.3], issues=issues
+        values=values_a,
+        weights=[0.8, 0.2],
+        issues=issues,
     )
     pref_b = LinearAdditiveUtilityFunction(
-        values=[apple_values_b, banana_values_b], weights=[0.2, 0.8], issues=issues
+        values=values_b,
+        weights=[0.8, 0.2],
+        issues=issues,
     )
 
     # 4. Setup the SAO Mechanism
