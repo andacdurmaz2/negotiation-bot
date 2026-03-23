@@ -11,6 +11,7 @@ from negmas.sao import SAOMechanism
 from negmas.outcomes import make_issue
 from negmas.preferences import LinearAdditiveUtilityFunction
 from src.negotiation_agent import Group35_Negotiator
+from src.negotiator_v1 import OldNegotiator
 
 
 def run_self_test():

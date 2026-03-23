@@ -7,7 +7,7 @@ from negmas import Outcome, ResponseType
 class Group35_Negotiator(SAONegotiator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # BOA Parameters for your report
+        # BOA Parameters
         self.concession_parameter = 0.2
         self.min_utility = 0.6
         self.max_utility = 1.0
@@ -23,7 +23,7 @@ class Group35_Negotiator(SAONegotiator):
             reserved = float(self.ufun.reserved_value)
         # Only use it if it's a sensible value
         if reserved != float("-inf") and reserved != float("inf"):
-            self.min_utility = reserved
+            self.min_utility = max(0.5, reserved)
 
         # Sort the outcomes by utility for efficient proposal generation
         outcomes = list(self.nmi.discrete_outcomes())
@@ -68,7 +68,7 @@ class Group35_Negotiator(SAONegotiator):
     def propose(
         self, state: SAOState, dest: str | None = None, **kwargs
     ) -> Outcome | None:
-        """Bidding Strategy: Propose an outcome that meets our target utility."""
+        """Bidding Strategy: Time Based Strategy where we propose outcomes based on our aspiration level and opponent modeling."""
 
         if not self._sorted_outcomes:
             return None
@@ -87,9 +87,9 @@ class Group35_Negotiator(SAONegotiator):
             self._proposed.add(best[1])
             return best[1]
 
+        # If no candidates meet the aspiration level, just propose the best outcome
         for util, outcome in self._sorted_outcomes:
-            if outcome not in self._proposed:
-                self._proposed.add(outcome)
+            if util >= aspiration_level:
                 return outcome
 
         return self._sorted_outcomes[0][1]
@@ -102,7 +102,7 @@ class Group35_Negotiator(SAONegotiator):
 
     def _estimate_opponent_utility(self, outcome: Outcome) -> float:
         """
-        Estimates how much the opponent values this outcome based on
+        Frequency Based Opponent Modeling: Estimates how much the opponent values this outcome based on
         how often they proposed each value in each issue.
 
         Issues where the opponent always proposes the same value get
