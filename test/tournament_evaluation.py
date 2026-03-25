@@ -1,49 +1,33 @@
 """
-Runs structured tournaments across multiple domains and opponents, computes
-negotiation-quality metrics (individual utility, Nash product, Pareto distance,
-social welfare, agreement rate, concession speed), and saves results to CSV + JSON.
+tournament_runner.py — Group 35 Negotiation Agent: Tournament Evaluation
+=========================================================================
+Runs structured tournaments across multiple domains and opponents and
+computes per-session negotiation-quality metrics.
 
-Usage:
-    python tournament_runner.py              # full tournament, all domains
-    python tournament_runner.py --quick      # 2 repetitions, 3 domains (fast check)
-    python tournament_runner.py --domain Trade  # single named domain only
+Metrics computed:
+    our_utility     — utility achieved by Group35_Negotiator
+    opp_utility     — utility achieved by the opponent
+    social_welfare  — our_utility + opp_utility
+    nash_product    — sqrt((uA - rvA) * (uB - rvB))
+    pareto_distance — Euclidean distance to nearest Pareto-frontier point
+    advantage       — our_utility - opp_utility
+    agreement       — whether a deal was reached
+    n_steps         — negotiation rounds used
 
-Outputs (in ./results/):
-    raw_results.csv          — one row per negotiation session
-    summary_by_opponent.csv  — aggregated stats per opponent
-    summary_by_domain.csv    — aggregated stats per domain
-    tournament_config.json   — full config snapshot for reproducibility
+Usage (edit CONFIG at the bottom, then run):
+    python tournament_runner.py
 """
 
-import sys
 import math
-import json
 import time
-import argparse
 import random
+import sys
 from pathlib import Path
-from collections import defaultdict
-from dataclasses import dataclass, asdict
-from typing import Type, Optional
+from typing import Type
 
-import pandas as pd
-from negmas import make_issue, Scenario
-from negmas.preferences import LinearAdditiveUtilityFunction as LAU
-from negmas.preferences.value_fun import TableFun
-from negmas.outcomes import make_os
 from negmas.sao.mechanism import SAOMechanism
 from negmas.sao import SAONegotiator
-from negmas.inout import pareto_frontier, nash_points
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from src.negotiation_agent import Group35_Negotiator
-from test.domains import build_domains
-from test.models import NegotiationResult
-from test.results_io import save_results, print_summary
-
-# ---------------------------------------------------------------------------
-# Benchmark Agents (built-in negmas negotiators — no extra install needed)
-# ---------------------------------------------------------------------------
+from negmas.inout import pareto_frontier
 
 from negmas.sao.negotiators import (
     BoulwareTBNegotiator,  # time-based, slow concession  (e < 1)
@@ -53,9 +37,28 @@ from negmas.sao.negotiators import (
     ToughNegotiator,  # hardheaded: proposes only its single best outcome
     NaiveTitForTatNegotiator,  # reactive: mirrors opponent concession rate
     CABNegotiator,  # concede-and-build hybrid
-    NiceNegotiator,  # trivial: accepts everything (utility upper bound)
 )
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.negotiation_agent import Group35_Negotiator
+from domains import build_domains
+from models import NegotiationResult
+from results_io import save_results, print_summary
+
+# ---------------------------------------------------------------------------
+# Opponent set — one per strategy family
+#
+#   Family              Agent              Rationale
+#   ──────────────────  ─────────────────  ──────────────────────────────────
+#   Time-based slow     Boulware           Canonical tough TB; same family as ours
+#   Time-based moderate Linear             Baseline e=1; spans the TB spectrum
+#   Time-based fast     Conceder           Tests whether we exploit fast concessions
+#   Pareto-aware        MiCRO              Exposes our deadline/floor weakness
+#   Hardheaded          Tough              Pure deadlock stress test
+#   Reactive/adaptive   NaiveTitForTat     Only opponent that responds to our moves
+#   Concede-and-build   CAB                Hybrid; concedes fast on low-weight issues
+#   Self-play           Self               Internal consistency / symmetry check
+# ---------------------------------------------------------------------------
 OPPONENTS: dict[str, Type[SAONegotiator]] = {
     "Boulware": BoulwareTBNegotiator,
     "Linear": LinearTBNegotiator,
@@ -64,13 +67,12 @@ OPPONENTS: dict[str, Type[SAONegotiator]] = {
     "Tough": ToughNegotiator,
     "NaiveTitForTat": NaiveTitForTatNegotiator,
     "CAB": CABNegotiator,
-    "Nice": NiceNegotiator,
     "Self": Group35_Negotiator,
 }
 
 
 # ---------------------------------------------------------------------------
-# Single session runner
+# Core session runner
 # ---------------------------------------------------------------------------
 
 
@@ -118,6 +120,11 @@ def _run_session(
         "n_steps": result.step,
         "duration_s": elapsed,
     }
+
+
+# ---------------------------------------------------------------------------
+# Tournament
+# ---------------------------------------------------------------------------
 
 
 def run_tournament(
@@ -199,6 +206,7 @@ def run_tournament(
 # ---------------------------------------------------------------------------
 # Entry point — edit CONFIG to adjust the run
 # ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
     CONFIG = {
         "n_repetitions": 5,  # sessions per (domain x opponent x role)
